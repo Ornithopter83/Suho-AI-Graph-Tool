@@ -781,6 +781,10 @@ internal static class MilestoneDefinitionContract
         builder.AppendLine("SV_COMPLETED: " + (completedIds.Length == 0 ? "none" : string.Join(",", completedIds)));
         builder.AppendLine("SV_BLOCKED: " + (blockedIds.Length == 0 ? "none" : string.Join(",", blockedIds)));
         builder.AppendLine("SV_PENDING: " + (pendingIds.Length == 0 ? "none" : string.Join(",", pendingIds)));
+        var unverifiedIds = statuses.Where(item => item.Status is null)
+            .Select(item => item.Key).ToArray();
+        builder.AppendLine("SV_UNVERIFIED: " + (unverifiedIds.Length == 0
+            ? "none" : string.Join(",", unverifiedIds)));
         if (!string.IsNullOrWhiteSpace(workingDirectory) && !string.IsNullOrWhiteSpace(jobId))
         {
             var workHistory = WorkExecutionJournal.ReadAll(workingDirectory, jobId);
@@ -819,7 +823,8 @@ internal static class MilestoneDefinitionContract
             builder.AppendLine("HIGH_REPORT_RAW:");
             builder.AppendLine(highReport);
             var high = RoleTextProtocol.ParseHigh(highReport);
-            builder.AppendLine("HIGH_STATUS: " + (high.IsValid ? high.Status : "protocol_invalid"));
+            builder.AppendLine("HIGH_STATUS: " + (ReadHighStatus(highReport) ??
+                "UNVERIFIED"));
             if (!high.IsValid)
                 builder.AppendLine("- raw=" + Limit(highReport.Replace("\n", " | "), 1400));
             else
@@ -890,13 +895,17 @@ internal static class MilestoneDefinitionContract
     public static string? ReadWorkStatus(string message)
     {
         var parsed = RoleTextProtocol.ParseWork(message);
-        return parsed.IsValid ? parsed.Status : null;
+        return parsed.IsValid &&
+            parsed.Status is "completed" or "blocked" or "in_progress"
+                ? parsed.Status : null;
     }
 
     public static string? ReadHighStatus(string message)
     {
         var parsed = RoleTextProtocol.ParseHigh(message);
-        return parsed.IsValid ? parsed.Status : null;
+        return parsed.IsValid &&
+            parsed.Status is "completed" or "blocked"
+                ? parsed.Status : null;
     }
 
     internal static void AppendDelegatedChildren(
