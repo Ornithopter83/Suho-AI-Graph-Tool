@@ -71,18 +71,18 @@ internal static class RoleTextProtocol
         if (reportIndex >= 0)
             return ParseLooseReport(lines, reportIndex, allowedStatuses);
 
-        if (TryParseLegacyJsonResult(lines, allowedStatuses, out var jsonResult))
+        if (TryParseLegacyJsonResult(lines, allowedStatuses, out var jsonResult) &&
+            jsonResult.IsValid)
             return jsonResult;
 
         var significant = lines
             .Select((line, index) => new { Text = line.Trim(), Index = index })
             .Where(item => item.Text.Length > 0)
             .ToArray();
-        if (significant.Length == 0 ||
-            !string.Equals(significant[0].Text, "[ACTION=RESULT]", StringComparison.OrdinalIgnoreCase))
-        {
-            errors.Add("ACTION_RESULT_REQUIRED");
-        }
+        if (significant.Length < 2 ||
+            significant[0].Text != "[ACTION=RESULT]" ||
+            significant[^1].Text != WebCorrelationContract.ResponseOkMarker)
+            errors.Add("BRACKET_CONTROL_INVALID");
 
         var status = string.Empty;
         foreach (var line in lines)
@@ -94,16 +94,14 @@ internal static class RoleTextProtocol
             break;
         }
 
-        if (!allowedStatuses.Contains(status, StringComparer.OrdinalIgnoreCase))
-            errors.Add("STATUS");
+        // Status is advisory data; its interpretation belongs to SV/HIGH.
 
         var sections = ReadSections(lines);
         sections.TryGetValue("SUMMARY", out var summary);
         sections.TryGetValue("CHANGED_PATHS", out var changed);
         sections.TryGetValue("ISSUES", out var issues);
 
-        if (string.IsNullOrWhiteSpace(summary))
-            errors.Add("SUMMARY");
+        // Missing narrative fields must never reject the role message.
 
         return new(
             status,
@@ -130,29 +128,22 @@ internal static class RoleTextProtocol
         if (header.Length != 1 ||
             !string.Equals(header[0], "[ACTION=RESULT]",
                 StringComparison.OrdinalIgnoreCase))
-            errors.Add("ACTION_RESULT_REQUIRED");
-
-        // Only square-bracket controls are a strict grammar. Read them
-        // outside fenced examples so prose can quote the syntax safely.
-        var controlLines = new List<string>();
-        var insideExample = false;
-        foreach (var sourceLine in lines)
-        {
-            var marker = sourceLine.Trim();
-            if (marker.StartsWith("```", StringComparison.Ordinal))
-            {
-                insideExample = !insideExample;
-                continue;
-            }
-            if (insideExample || !Regex.IsMatch(marker,
-                @"^\[(?:ACTION|GOTO|KEY|RESPONSE)[=\]]"))
-                continue;
-            controlLines.Add(marker);
-        }
-        if (controlLines.Count(line => line == "[ACTION=RESULT]") != 1 ||
-            controlLines.Count(line => line == "[RESPONSE=OK]") != 1 ||
-            controlLines.Any(line => line is not ("[ACTION=RESULT]" or "[RESPONSE=OK]")))
             errors.Add("BRACKET_CONTROL_INVALID");
+
+        // Only the outer envelope is a transport command. Child reports and
+        // bracket examples within @@REPORT are opaque prose.
+        var significant = lines.Select(line => line.Trim())
+            .Where(line => line.Length > 0).ToArray();
+        if (significant.Length < 2 ||
+            significant[0] != "[ACTION=RESULT]" ||
+            significant[^1] != WebCorrelationContract.ResponseOkMarker)
+            errors.Add("BRACKET_CONTROL_INVALID");
+        for (var i = 1; i < reportIndex; i++)
+            if (Regex.IsMatch(lines[i].Trim(),
+                @"^\[(?:ACTION|GOTO|KEY|RESPONSE)[=\]]"))
+                errors.Add("BRACKET_CONTROL_INVALID");
+        var responseEnd = Array.FindLastIndex(lines,
+            line => line.Trim() == WebCorrelationContract.ResponseOkMarker);
 
         var fields = new List<(string Name, string Value)>();
         var outside = new List<string>();
@@ -184,7 +175,7 @@ internal static class RoleTextProtocol
         {
             var line = lines[i];
             var trimmed = line.Trim();
-            if (trimmed == WebCorrelationContract.ResponseOkMarker && !inFence)
+            if (i == responseEnd && !inFence)
             {
                 if (lines.Skip(i + 1).Any(after =>
                     !string.IsNullOrWhiteSpace(after) &&
@@ -300,11 +291,7 @@ internal static class RoleTextProtocol
             .Select(field => field.Value.Trim().ToLowerInvariant())
             .ToArray();
         var status = statuses.FirstOrDefault() ?? string.Empty;
-        if (statuses.Length == 0 ||
-            statuses.Any(value => !string.Equals(value, status,
-                StringComparison.OrdinalIgnoreCase)) ||
-            !allowedStatuses.Contains(status, StringComparer.OrdinalIgnoreCase))
-            errors.Add("STATUS");
+        // Missing or conflicting <STATUS> is an AI-owned report issue.
 
         var summaries = fields.Where(field => field.Name == "SUMMARY")
             .Select(field => field.Value)
@@ -312,8 +299,7 @@ internal static class RoleTextProtocol
             .ToList();
         // Untagged prose is preserved, but it cannot replace the explicit
         // SUMMARY field when deciding whether a role report is complete.
-        if (summaries.Count == 0)
-            errors.Add("SUMMARY");
+        // Missing <SUMMARY> is an AI-owned report issue.
         if (outside.Count > 0)
             summaries.Insert(0, string.Join("\n", outside));
         var summary = string.Join("\n", summaries);
