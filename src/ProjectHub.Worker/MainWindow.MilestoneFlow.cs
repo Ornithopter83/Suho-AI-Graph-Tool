@@ -13,7 +13,8 @@ public partial class MainWindow
         string Body);
 
     private sealed record SupervisorExecutionResult(
-        string Report, DelegationMetrics Delegations);
+        string Report, DelegationMetrics Delegations, int ExitCode,
+        string StandardError);
 
     private sealed record WorkExecutionReport(
         string Id,
@@ -877,6 +878,11 @@ public partial class MainWindow
                 jobId, workingDirectory, milestone, cancellationToken);
             supervisorDelegations = supervisor.Delegations;
             workReports["1"] = supervisor.Report;
+            if (supervisor.ExitCode != 0)
+            {
+                outcome = "SV_EXECUTION_FAILED";
+                mechanicalReports.Add("SV_EXECUTION_ERROR: " + supervisor.StandardError);
+            }
             var afterSv = await MilestoneMechanicalExecutor.SnapshotChangeStateAsync(
                 workingDirectory, cancellationToken);
             var svChangedPaths = MilestoneMechanicalExecutor.DiffChangeStates(
@@ -907,7 +913,7 @@ public partial class MainWindow
                         StringComparison.OrdinalIgnoreCase))
                 .Select(pair => pair.Key)
                 .ToArray();
-            if (blockedWorkIds.Length > 0)
+            if (blockedWorkIds.Length > 0 && outcome == "COMPLETED")
             {
                 outcome =
                     "SV_BLOCKED:" +
@@ -917,9 +923,16 @@ public partial class MainWindow
                             : int.MaxValue));
             }
 
-            else if (pendingWorkIds.Length > 0)
+            else if (pendingWorkIds.Length > 0 && outcome == "COMPLETED")
             {
                 outcome = "SV_IN_PROGRESS:" + string.Join(",", pendingWorkIds);
+            }
+            else if (outcome == "COMPLETED" &&
+                MilestoneDefinitionContract.ReadWorkStatus(supervisor.Report) is null)
+            {
+                // No validated parent status: never treat an opaque report as
+                // authorization to finalize Git.
+                outcome = "SV_REPORT_UNVERIFIED";
             }
 
             CaptureResourceState();
@@ -949,21 +962,32 @@ public partial class MainWindow
             {
             var beforeHigh = await MilestoneMechanicalExecutor.SnapshotChangeStateAsync(
                 workingDirectory, cancellationToken);
-            highReport = await ExecuteMilestoneHighAsync(
+            var highRun = await ExecuteMilestoneHighAsync(
                 jobId, workingDirectory, milestone, workReports, resourceReports,
                 mechanicalReports, implementer, high, 1, cancellationToken,
                 supervisorDelegations,
                 metrics => highDelegations = metrics);
+            highReport = highRun.Report;
+            if (highRun.ExitCode != 0)
+            {
+                mechanicalReports.Add("HIGH_EXECUTION_ERROR: " + highRun.StandardError);
+                if (outcome == "COMPLETED")
+                    outcome = "HIGH_EXECUTION_FAILED";
+            }
             var afterHigh = await MilestoneMechanicalExecutor.SnapshotChangeStateAsync(
                 workingDirectory, cancellationToken);
             foreach (var path in MilestoneMechanicalExecutor.DiffChangeStates(
                 beforeHigh, afterHigh))
                 milestoneChangedPaths.Add(path);
 
-            if (outcome == "COMPLETED" &&
-                string.Equals(MilestoneDefinitionContract.ReadHighStatus(highReport),
-                    "blocked", StringComparison.OrdinalIgnoreCase))
-                outcome = "HIGH_BLOCKED";
+            if (outcome == "COMPLETED")
+            {
+                var highStatus = MilestoneDefinitionContract.ReadHighStatus(highReport);
+                if (string.Equals(highStatus, "blocked", StringComparison.OrdinalIgnoreCase))
+                    outcome = "HIGH_BLOCKED";
+                else if (!string.Equals(highStatus, "completed", StringComparison.OrdinalIgnoreCase))
+                    outcome = "HIGH_REPORT_UNVERIFIED";
+            }
 
             }
 
@@ -1352,7 +1376,8 @@ public partial class MainWindow
                     StringComparison.OrdinalIgnoreCase) ? "BLOCKED" : "RECEIVED",
                 providerWireId: settings.Provider, fullMessage: report,
                 workItemId: "1", referenceId: reference));
-            return new SupervisorExecutionResult(report, metrics);
+            return new SupervisorExecutionResult(
+                report, metrics, result.ExitCode, result.StandardError);
         }
         finally
         {
@@ -1833,7 +1858,7 @@ public partial class MainWindow
             moved);
     }
 
-    private async Task<string> ExecuteMilestoneHighAsync(
+    private async Task<(string Report, int ExitCode, string StandardError)> ExecuteMilestoneHighAsync(
         string jobId,
         string workingDirectory,
         MilestoneDefinition milestone,
@@ -1900,7 +1925,7 @@ public partial class MainWindow
             workItemId: "HIGH",
             referenceId: historyInvocationReference);
 
-        return report;
+        return (report, result.ExitCode, result.StandardError);
     }
 
     private async Task<AiRoleRunResult> RunHighDelegatedReviewAsync(
