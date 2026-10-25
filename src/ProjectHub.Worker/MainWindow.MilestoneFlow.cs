@@ -1324,17 +1324,16 @@ public partial class MainWindow
 
             if (SpecialistDelegationPolicy.MustBlockForUnsafeDelegation(metrics))
             {
-                var parsed = RoleTextProtocol.ParseWork(result.FinalMessage);
-                var original = parsed.IsValid ? parsed.Summary :
-                    MilestoneDefinitionContract.Limit(result.FinalMessage, 1800);
+                // Actual safety violations block execution, not report grammar.
                 result = result with
                 {
                     ExitCode = 1,
-                    FinalMessage = RoleTextProtocol.BuildResult(
-                        "blocked", SpecialistDelegationPolicy.UnsafeFailureCode,
-                        issues: new[] { original }.Concat(
+                    StandardError = result.StandardError + Environment.NewLine +
+                        SpecialistDelegationPolicy.UnsafeFailureCode +
+                        Environment.NewLine +
+                        string.Join(Environment.NewLine,
                             metrics.Evidence.Where(entry => entry.Status is
-                                "UNSAFE" or "CANCELED").Select(entry => entry.Detail)).ToArray())
+                                "UNSAFE" or "CANCELED").Select(entry => entry.Detail))
                 };
             }
             else
@@ -1927,7 +1926,7 @@ public partial class MainWindow
                     Environment.NewLine +
                     "실제 파일 검토·테스트는 delegate_work(read_only=true)로 먼저 요청하라. " +
                     "MCP 도구 호출이 WORK 결과까지 반환하므로 직접 검증 내용을 확인하고 " +
-                    "미검증 항목을 구분해 최종 판정하라. 직접 명령·파일 수정은 금지한다."),
+                    "미검증 항목을 구분해 최종 판정하라. 직접 명령·파일 수정은 금지한다. SV/WORK 기존 증거를 우선 확인하고 추가 검증과 재위임 여부는 HIGH가 판단한다."),
                 high, workingDirectory, null, null, cancellationToken,
                 CodexSandboxMode.ReadOnly,
                 historyWorkItemId: "HIGH",
@@ -1945,30 +1944,21 @@ public partial class MainWindow
 
             if (metrics.UnsafeFailures > 0)
             {
-                var parsed = RoleTextProtocol.ParseHigh(result.FinalMessage);
                 result = result with
                 {
                     ExitCode = 1,
-                    FinalMessage = RoleTextProtocol.BuildResult(
-                        "blocked", "HIGH_WORK_UNSAFE",
-                        issues: metrics.Evidence.Where(item =>
-                            item.Status is "UNSAFE" or "CANCELED")
-                            .Select(item => item.Detail)
-                            .Prepend(parsed.IsValid ? parsed.Summary :
-                                MilestoneDefinitionContract.Limit(result.FinalMessage, 1000))
-                            .ToArray())
+                    StandardError = result.StandardError + Environment.NewLine +
+                        "HIGH_WORK_UNSAFE" + Environment.NewLine +
+                        string.Join(Environment.NewLine,
+                            metrics.Evidence.Where(item => item.Status is
+                                "UNSAFE" or "CANCELED").Select(item => item.Detail))
                 };
             }
-            else if (metrics.Successful == 0 && result.ExitCode == 0 &&
-                     string.Equals(
-                         RoleTextProtocol.ParseHigh(result.FinalMessage).Status,
-                         "completed", StringComparison.OrdinalIgnoreCase))
+            else if (metrics.Successful == 0 && result.ExitCode == 0)
             {
                 result = result with
                 {
                     ExitCode = 1,
-                    FinalMessage = RoleTextProtocol.BuildResult(
-                        "blocked", "HIGH_WORK_DELEGATION_REQUIRED"),
                     StandardError = result.StandardError + Environment.NewLine +
                         "HIGH_WORK_DELEGATION_REQUIRED"
                 };
