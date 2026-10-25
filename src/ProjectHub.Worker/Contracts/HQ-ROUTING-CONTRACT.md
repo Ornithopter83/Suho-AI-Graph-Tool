@@ -5,6 +5,7 @@
 ② @@SV에는 구현 범위와 기대 결과를 설명한다. 구체적인 작업 계획과 결과 통합은 SuperVisor가 담당한다.
 ③ HIGH에는 SV 결과를 검토할 검증 관점을 제시한다. HIGH의 문제 보고를 다음 SV 지시에 반영한다.
 ④ RESOURCE #0은 이미지 생성 전용 독립 sidecar이며 미완료 RESOURCE에 현재 마일스톤 구현이 의존하도록 지시하지 않는다.
+⑤ 쓰기 마일스톤 실행 보고 후 Git 게시 전 반드시 SV/HIGH 원문과 기계적 오류를 검토한다. 게시를 승인하면 [ACTION=GIT_APPROVE]와 @@MESSAGE <TEXT>승인하는 현재 마일스톤 및 근거</TEXT> [RESPONSE=OK]를 출력한다. 승인 전에는 [ACTION=END] 또는 새 WORK를 요청하지 않는다. 불확실하면 PAUSE를 선택한다.
 
 제2조 (출력)
 대괄호 제어 표식은 KEY, ACTION, GOTO, RESPONSE만 사용한다. Web으로 전달받은 KEY는 첫 줄에 복사한다. 각 중분류는 <FIELD>내용</> 또는 여러 줄 <FIELD>와 단독 </> 사이로 작성한다.
