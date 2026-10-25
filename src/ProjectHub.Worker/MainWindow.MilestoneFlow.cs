@@ -1104,7 +1104,7 @@ public partial class MainWindow
             {
                 // An inspection-only milestone with no changed paths has
                 // nothing to publish and must never push an old HEAD.
-                gitResult = MilestoneGitResult.SkippedReadOnly(milestone.TargetBranch);
+                gitResult = MilestoneGitResult.SkippedNoChanges(milestone.TargetBranch);
                 AddDataFlowHistory(
                     WorkerRoleState.Unknown, "Git 최종화",
                     "GIT_FINALIZE_SKIPPED_NO_CHANGES: 변경 파일 없음 · 이전 HEAD 게시 안 함",
@@ -1142,10 +1142,13 @@ public partial class MainWindow
                     workingDirectory,
                     cancellationToken);
 
-            var graphGitState = MilestoneFinalizationPolicy.ResolveGitGraphState(
-                milestone.ReadOnlyNoFileChanges,
-                blockedWorkIds.Length, pendingWorkIds.Length,
-                buildFailed, outcome, gitResult.Success);
+            var graphGitState = gitResult.Summary.Contains(
+                    "status=SKIPPED_NO_CHANGES", StringComparison.Ordinal)
+                ? "SKIPPED_NO_CHANGES"
+                : MilestoneFinalizationPolicy.ResolveGitGraphState(
+                    milestone.ReadOnlyNoFileChanges,
+                    blockedWorkIds.Length, pendingWorkIds.Length,
+                    buildFailed, outcome, gitResult.Success);
             SaveMilestoneExecutionGraph(
                 workingDirectory,
                 jobId,
