@@ -48,6 +48,7 @@ public sealed class MilestoneFinalizationPolicyTests
     [Theory]
     [InlineData(false, 0, 0, false, "GIT_FINALIZE_FAILED", false, "FINALIZE_FAILED")]
     [InlineData(false, 0, 0, false, "COMPLETED", true, "FINALIZED")]
+    [InlineData(false, 0, 0, false, "GIT_APPROVAL_REQUIRED", false, "PENDING_APPROVAL")]
     [InlineData(false, 1, 0, false, "SV_BLOCKED:1", false, "SKIPPED_BLOCKED")]
     [InlineData(true, 0, 0, false, "COMPLETED", true, "SKIPPED_READ_ONLY")]
     public void GraphShowsFailedAttemptInsteadOfSkippedOperation(
