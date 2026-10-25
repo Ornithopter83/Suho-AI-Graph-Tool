@@ -1106,6 +1106,11 @@ public partial class MainWindow
                     status: "PENDING", persistenceSource: "WORKER ACTION");
             }
 
+            // Provider exit 0 is execution evidence, never an AI quality PASS.
+            // HQ makes the final content judgment from preserved raw reports.
+            if (outcome == "COMPLETED")
+                outcome = "HQ_REVIEW_REQUIRED";
+
             // A successful implementation is not a completed milestone when
             // the required Git commit/push failed. Preserve earlier failure
             // causes rather than hiding them behind the Git failure.
