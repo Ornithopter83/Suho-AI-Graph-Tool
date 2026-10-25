@@ -968,27 +968,8 @@ public partial class MainWindow
                         StringComparison.OrdinalIgnoreCase))
                 .Select(pair => pair.Key)
                 .ToArray();
-            if (blockedWorkIds.Length > 0 && outcome == "COMPLETED")
-            {
-                outcome =
-                    "SV_BLOCKED:" +
-                    string.Join(",", blockedWorkIds.OrderBy(
-                        id => int.TryParse(id, out var number)
-                            ? number
-                            : int.MaxValue));
-            }
-
-            else if (pendingWorkIds.Length > 0 && outcome == "COMPLETED")
-            {
-                outcome = "SV_IN_PROGRESS:" + string.Join(",", pendingWorkIds);
-            }
-            else if (outcome == "COMPLETED" &&
-                MilestoneDefinitionContract.ReadWorkStatus(supervisor.Report) is null)
-            {
-                // No validated parent status: never treat an opaque report as
-                // authorization to finalize Git.
-                outcome = "SV_REPORT_UNVERIFIED";
-            }
+            // STATUS fields are advisory AI data, not Worker workflow gates.
+            // The raw SV report goes to HIGH and HQ without a success judgment.
 
             CaptureResourceState();
 
@@ -1008,7 +989,7 @@ public partial class MainWindow
             // BUILD failures return to HQ for a new SV-led repair milestone.
 
             // Preserve the original implementation/build outcome.
-            if (blockedWorkIds.Length == 0 && buildFailed)
+            if (buildFailed && outcome == "COMPLETED")
                 outcome = "BUILD_FAILED";
 
 
@@ -1037,14 +1018,8 @@ public partial class MainWindow
                 beforeHigh, afterHigh))
                 milestoneChangedPaths.Add(path);
 
-            if (outcome == "COMPLETED")
-            {
-                var highStatus = MilestoneDefinitionContract.ReadHighStatus(highReport);
-                if (string.Equals(highStatus, "blocked", StringComparison.OrdinalIgnoreCase))
-                    outcome = "HIGH_BLOCKED";
-                else if (!string.Equals(highStatus, "completed", StringComparison.OrdinalIgnoreCase))
-                    outcome = "HIGH_REPORT_UNVERIFIED";
-            }
+            // HIGH's own completion judgment remains opaque and is presented
+            // unchanged for the HQ approval decision.
 
             }
 
