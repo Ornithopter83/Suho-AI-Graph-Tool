@@ -1100,6 +1100,16 @@ public partial class MainWindow
                     status: "BLOCKED",
                     persistenceSource: "WORKER ACTION");
             }
+            else if (milestoneChangedPaths.Count == 0)
+            {
+                // An inspection-only milestone with no changed paths has
+                // nothing to publish and must never push an old HEAD.
+                gitResult = MilestoneGitResult.SkippedReadOnly(milestone.TargetBranch);
+                AddDataFlowHistory(
+                    WorkerRoleState.Unknown, "Git 최종화",
+                    "GIT_FINALIZE_SKIPPED_NO_CHANGES: 변경 파일 없음 · 이전 HEAD 게시 안 함",
+                    status: "SKIPPED", persistenceSource: "WORKER ACTION");
+            }
             else
             {
                 // HQ reviews the raw SV/HIGH evidence before Git publication.
