@@ -67,11 +67,21 @@ public partial class MainWindow
                 !string.Equals(previous, pair.Value, StringComparison.Ordinal)))
             throw new InvalidOperationException("GIT_APPROVAL_EVIDENCE_CHANGED");
 
+        // Acknowledge only the RESOURCE generations actually in the approved
+        // path set. A newer sidecar result must remain pending for later Git.
+        var resourceSnapshot = _resourcePendingGit.Snapshot(root)
+            .Where(item => pending.Paths.Contains(item.Key,
+                StringComparer.OrdinalIgnoreCase))
+            .ToDictionary(item => item.Key, item => item.Value,
+                StringComparer.OrdinalIgnoreCase);
         var git = await MilestoneMechanicalExecutor.FinalizeGitAsync(
             root, pending.Milestone, pending.Paths, repositoryUrl,
             cancellationToken).ConfigureAwait(false);
         if (git.Success)
+        {
+            _resourcePendingGit.Acknowledge(root, resourceSnapshot);
             File.Delete(PendingGitApprovalPath(root));
+        }
         return git;
     }
 }
