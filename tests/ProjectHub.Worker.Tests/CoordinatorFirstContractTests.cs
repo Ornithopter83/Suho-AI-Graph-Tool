@@ -20,7 +20,7 @@ public sealed class CoordinatorFirstContractTests
     [Fact]
     public void RoleReport_MissingMiddleFields_PreservesBracketValidRaw()
     {
-        const string report = "[ACTION=RESULT]\\n@@REPORT\\n<ISSUES>원문 전달</ISSUES>\\n[RESPONSE=OK]";
+        const string report = "[ACTION=RESULT]\n@@REPORT\n<ISSUES>원문 전달</ISSUES>\n[RESPONSE=OK]";
         var parsed = RoleTextProtocol.ParseWork(report);
         Assert.True(parsed.IsValid, string.Join("; ", parsed.Errors));
         Assert.Equal("", parsed.Status);
