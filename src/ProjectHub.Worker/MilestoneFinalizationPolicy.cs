@@ -22,6 +22,8 @@ internal static class MilestoneFinalizationPolicy
     {
         if (readOnlyNoFileChanges)
             return "SKIPPED_READ_ONLY";
+        if (string.Equals(outcome, "GIT_APPROVAL_REQUIRED", StringComparison.Ordinal))
+            return "PENDING_APPROVAL";
         if (string.Equals(outcome, "GIT_FINALIZE_FAILED", StringComparison.Ordinal))
             return "FINALIZE_FAILED";
         if (!ShouldPublish(blockedWorkCount, pendingWorkCount, buildFailed, outcome))
