@@ -3,21 +3,20 @@ using System.Text.Json;
 
 namespace ProjectHub.Worker;
 
+// HQ approval metadata is persisted locally across process restarts.
+internal sealed record PendingGitApproval(
+    string JobId,
+    string WorkspaceRoot,
+    MilestoneDefinition Milestone,
+    string[] Paths,
+    Dictionary<string, string> Snapshot);
+
 public partial class MainWindow
 {
-    // HQ must explicitly approve a completed milestone's Git publication.
-    // Pending approval survives a paused/restarted Worker in the local workspace.
-    private sealed record PendingGitApproval(
-        string JobId,
-        string WorkspaceRoot,
-        MilestoneDefinition Milestone,
-        string[] Paths,
-        Dictionary<string, string> Snapshot);
-
     private static string PendingGitApprovalPath(string root) =>
         Path.Combine(root, ".projecthub", "pending-git-approval.json");
 
-    private static PendingGitApproval? LoadPendingGitApproval(string root)
+    internal static PendingGitApproval? LoadPendingGitApproval(string root)
     {
         var path = PendingGitApprovalPath(root);
         if (!File.Exists(path)) return null;
@@ -31,7 +30,7 @@ public partial class MainWindow
         return pending;
     }
 
-    private static void SavePendingGitApproval(string root, PendingGitApproval pending)
+    internal static void SavePendingGitApproval(string root, PendingGitApproval pending)
     {
         var path = PendingGitApprovalPath(root);
         if (File.Exists(path))
