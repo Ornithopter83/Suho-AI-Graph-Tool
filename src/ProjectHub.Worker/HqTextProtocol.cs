@@ -97,7 +97,7 @@ internal static class HqTextProtocol
             return Invalid("ACTION");
         }
 
-        if (action is not ("WORK" or "PAUSE" or "END"))
+        if (action is not ("WORK" or "PAUSE" or "END" or "GIT_APPROVE"))
             return Invalid("ACTION");
 
         var actionLine = significant[cursor].Index;
@@ -150,6 +150,7 @@ internal static class HqTextProtocol
             "WORK" => ParseWork(headers, sections, unknown),
             "PAUSE" => ParseControl("PAUSE", sections, unknown),
             "END" => ParseControl("END", sections, unknown),
+            "GIT_APPROVE" => ParseControl("GIT_APPROVE", sections, unknown),
             _ => Invalid("ACTION")
         };
     }
