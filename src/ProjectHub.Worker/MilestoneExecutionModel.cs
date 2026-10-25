@@ -65,6 +65,10 @@ internal sealed record MilestoneGitResult(
     public static MilestoneGitResult NotStarted(string targetBranch) =>
         new(false, false, targetBranch, null, "Git finalize 미수행");
 
+    public static MilestoneGitResult SkippedNoChanges(string targetBranch) =>
+        new(true, false, targetBranch, null,
+            "GIT_FINALIZE" + Environment.NewLine + "status=SKIPPED_NO_CHANGES");
+
     public static MilestoneGitResult SkippedReadOnly(string targetBranch) =>
         new(
             true,
