@@ -533,17 +533,8 @@ internal static class MilestoneDefinitionContract
         builder.AppendLine("@@WORK_RESULTS");
         foreach (var pair in workReports.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
         {
-            var parsed = RoleTextProtocol.ParseWork(pair.Value);
             builder.AppendLine($"# {pair.Key}");
-            if (parsed.IsValid)
-            {
-                builder.AppendLine("STATUS: " + parsed.Status);
-                builder.AppendLine(parsed.Summary);
-                foreach (var issue in parsed.Issues)
-                    builder.AppendLine("ISSUE: " + issue);
-            }
-            else
-                builder.AppendLine(pair.Value);
+            builder.AppendLine(pair.Value);
         }
 
         if (delegatedWork is not null)
@@ -811,6 +802,8 @@ internal static class MilestoneDefinitionContract
 
         foreach (var pair in workReports.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
         {
+            builder.AppendLine("SV_REPORT_RAW: " + pair.Key);
+            builder.AppendLine(pair.Value);
             var work = RoleTextProtocol.ParseWork(pair.Value);
             if (work.IsValid && string.Equals(work.Status, "blocked", StringComparison.OrdinalIgnoreCase))
             {
@@ -823,6 +816,8 @@ internal static class MilestoneDefinitionContract
 
         if (!string.IsNullOrWhiteSpace(highReport))
         {
+            builder.AppendLine("HIGH_REPORT_RAW:");
+            builder.AppendLine(highReport);
             var high = RoleTextProtocol.ParseHigh(highReport);
             builder.AppendLine("HIGH_STATUS: " + (high.IsValid ? high.Status : "protocol_invalid"));
             if (!high.IsValid)
@@ -908,6 +903,8 @@ internal static class MilestoneDefinitionContract
         StringBuilder builder, string parent, DelegationMetrics? metrics,
         int maxEvidenceLength = 320)
     {
+        // Parameter kept for existing callers; evidence is never truncated.
+        _ = maxEvidenceLength;
         if (metrics is null)
         {
             builder.AppendLine(parent + "_WORK_CHILDREN: NOT_RECORDED");
@@ -919,10 +916,12 @@ internal static class MilestoneDefinitionContract
             " rejected=" + metrics.Rejected +
             " execution_failed=" + metrics.RecoverableFailures +
             " unsafe=" + metrics.UnsafeFailures);
-        foreach (var evidence in metrics.Evidence.Take(24))
+        foreach (var evidence in metrics.Evidence)
+        {
             builder.AppendLine("- " + parent + "_WORK_INVOCATION: " +
-                Limit(evidence.Invocation, 120) + " " + evidence.Status +
-                " " + Limit(evidence.Detail, maxEvidenceLength));
+                evidence.Invocation + " " + evidence.Status);
+            builder.AppendLine(evidence.Detail);
+        }
     }
 
     private static string ArchiveMilestoneReports(
@@ -1052,69 +1051,21 @@ internal static class MilestoneDefinitionContract
     }
 
     public static string NormalizeWorkReport(
-        int exitCode,
-        string? finalMessage,
-        string? standardError)
+        int exitCode, string? finalMessage, string? standardError)
     {
-        var raw = finalMessage?.Trim() ?? string.Empty;
-        var parsed = RoleTextProtocol.ParseWork(raw);
-        if (exitCode != 0)
-        {
-            // Preserve the actual blocked code and evidence when a tool or
-            // policy rejected an otherwise well-formed role report.
-            if (parsed.IsValid && string.Equals(parsed.Status, "blocked",
-                    StringComparison.OrdinalIgnoreCase))
-                return RoleTextProtocol.BuildResult("blocked", parsed.Summary,
-                    parsed.ChangedPaths,
-                    parsed.Issues.Concat(string.IsNullOrWhiteSpace(standardError)
-                        ? Array.Empty<string>()
-                        : new[] { standardError.Trim() }).ToArray());
-            return RoleTextProtocol.BuildResult(
-                "blocked",
-                string.IsNullOrWhiteSpace(standardError)
-                    ? "WORK 실행 프로세스 실패"
-                    : standardError.Trim());
-        }
-
-        return parsed.IsValid
-            ? RoleTextProtocol.BuildResult(parsed.Status, parsed.Summary,
-                parsed.ChangedPaths, parsed.Issues)
-            : RoleTextProtocol.BuildResult(
-                "blocked",
-                "WORK_REPORT_CONTRACT_INVALID",
-                issues: parsed.Errors);
+        // CLI exit codes and stderr are recorded separately by the runner.
+        // Neither missing <STATUS> nor missing <SUMMARY> may replace AI output.
+        _ = exitCode;
+        _ = standardError;
+        return finalMessage ?? string.Empty;
     }
 
     public static string NormalizeHighReport(
-        int exitCode,
-        string? finalMessage,
-        string? standardError)
+        int exitCode, string? finalMessage, string? standardError)
     {
-        var raw = finalMessage?.Trim() ?? string.Empty;
-        var parsed = RoleTextProtocol.ParseHigh(raw);
-        if (exitCode != 0)
-        {
-            if (parsed.IsValid && string.Equals(parsed.Status, "blocked",
-                    StringComparison.OrdinalIgnoreCase))
-                return RoleTextProtocol.BuildResult("blocked", parsed.Summary,
-                    parsed.ChangedPaths,
-                    parsed.Issues.Concat(string.IsNullOrWhiteSpace(standardError)
-                        ? Array.Empty<string>()
-                        : new[] { standardError.Trim() }).ToArray());
-            return RoleTextProtocol.BuildResult(
-                "blocked",
-                string.IsNullOrWhiteSpace(standardError)
-                    ? "HIGH 실행 프로세스 실패"
-                    : standardError.Trim());
-        }
-
-        // Preserve unparseable HIGH evidence for diagnosis.
-        if (parsed.IsValid)
-            return RoleTextProtocol.BuildResult(parsed.Status, parsed.Summary,
-                parsed.ChangedPaths, parsed.Issues);
-        return raw.Length == 0
-            ? RoleTextProtocol.BuildResult("blocked", "HIGH_REPORT_EMPTY")
-            : raw;
+        _ = exitCode;
+        _ = standardError;
+        return finalMessage ?? string.Empty;
     }
 
     public static IReadOnlyList<string> ExtractHighChangedPaths(string report) =>
