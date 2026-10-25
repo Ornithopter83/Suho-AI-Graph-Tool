@@ -19,15 +19,13 @@ internal static class SpecialistDelegationPolicy
     {
         if (!mandatory || successfulDelegations > 0 || result.ExitCode != 0)
             return result;
-        var parsed = RoleTextProtocol.ParseWork(result.FinalMessage);
-        if (parsed.IsValid && string.Equals(parsed.Status, "blocked",
-                StringComparison.OrdinalIgnoreCase))
-            return result;
+        // Zero executed child calls is a mechanical policy violation. Do not
+        // rewrite the SV/HIGH statement or guess its status from <STATUS>.
         return result with
         {
             ExitCode = 1,
-            FinalMessage = RoleTextProtocol.BuildResult("blocked", MissingWorkCode),
-            StandardError = result.StandardError + Environment.NewLine + MissingWorkCode
+            StandardError = result.StandardError + Environment.NewLine +
+                MissingWorkCode
         };
     }
 }
