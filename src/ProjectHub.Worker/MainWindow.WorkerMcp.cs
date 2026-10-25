@@ -133,6 +133,16 @@ public partial class MainWindow
                     var executed = result.ExitCode == 0 &&
                         unexpectedChanges.Length == 0 &&
                         (!readOnly || ownChanges.Length == 0);
+                    // Observe only outer bracket controls. Invalid role grammar
+                    // is logged and passed through unchanged, never re-run here.
+                    var envelope = RoleTextProtocol.ParseWork(result.FinalMessage);
+                    if (!envelope.IsValid)
+                        RunOnUi(() => AddDataFlowHistory(WorkerRoleState.Work,
+                            "WORK 대괄호 제어문 오류 · 원문 전달",
+                            string.Join(", ", envelope.Errors),
+                            settings.Provider, status: "FORWARDED",
+                            referenceId: reference,
+                            persistenceSource: "WORKER ACTION"));
                     var summary = "INVOCATION: " + reference +
                         Environment.NewLine + "EXIT: " + result.ExitCode +
                         Environment.NewLine + "MODEL: " + result.Model +
