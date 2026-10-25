@@ -78,6 +78,22 @@ M22 문서를 구현한다.
     }
 
     [Fact]
+    public void HqGitApproval_RequiresExplicitBracketActionAndMessage()
+    {
+        const string approved = """
+[ACTION=GIT_APPROVE]
+@@MESSAGE
+<TEXT>SV/HIGH 원문과 검증 증거를 확인했으므로 현재 마일스톤 Git 최종화를 승인한다.</>
+[RESPONSE=OK]
+""";
+        var parse = HqTextProtocol.Parse(approved);
+        Assert.True(parse.IsValid, string.Join("; ", parse.Errors));
+        Assert.Equal("GIT_APPROVE", Assert.Single(parse.Parse.ValidActions).Name);
+        Assert.False(HqTextProtocol.Parse(
+            "[ACTION=GIT_APPROVE]\\n[RESPONSE=OK]").IsValid);
+    }
+
+    [Fact]
     public void TemporaryWorkPaths_RejectTraversalAndSensitiveTargets()
     {
         foreach (var path in new[] { "../outside.cs", "Master-Polish.md",
