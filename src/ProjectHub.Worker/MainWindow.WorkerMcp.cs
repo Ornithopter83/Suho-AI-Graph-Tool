@@ -128,11 +128,9 @@ public partial class MainWindow
                             TemporaryWorkScopeRegistry.Overlaps(path, change))).ToArray();
                     var unexpectedChanges = ownChanges.Except(scopedChanges,
                         StringComparer.OrdinalIgnoreCase).ToArray();
-                    var parsedWork = RoleTextProtocol.ParseWork(result.FinalMessage);
-                    var completed = result.ExitCode == 0 &&
-                        parsedWork.IsValid &&
-                        string.Equals(parsedWork.Status, "completed",
-                            StringComparison.OrdinalIgnoreCase) &&
+                    // A completed CLI invocation is a successful *execution*, not
+                    // a Worker judgment of <STATUS> or the report's meaning.
+                    var executed = result.ExitCode == 0 &&
                         unexpectedChanges.Length == 0 &&
                         (!readOnly || ownChanges.Length == 0);
                     var summary = "INVOCATION: " + reference +
@@ -146,10 +144,10 @@ public partial class MainWindow
                         Environment.NewLine + "OUT_OF_SCOPE_CHANGES: " +
                         string.Join(", ", unexpectedChanges.Take(30)) +
                         Environment.NewLine + "RESULT:" + Environment.NewLine +
-                        MilestoneDefinitionContract.Limit(result.FinalMessage, 5000);
+                        result.FinalMessage;
                     RunOnUi(() => AddRoleResponseHistory(WorkerRoleState.Work,
                         "임시 WORK 결과", summary, result.Usage, result.Files,
-                        status: completed ? "COMPLETED" : "BLOCKED",
+                        status: executed ? "RECEIVED" : "FAILED",
                         providerWireId: settings.Provider, referenceId: reference));
                     if (readOnly && ownChanges.Length != 0)
                         throw new InvalidOperationException("WORK_READ_ONLY_VIOLATION: " +
@@ -157,19 +155,14 @@ public partial class MainWindow
                     if (unexpectedChanges.Length != 0)
                         throw new InvalidOperationException("WORK_SCOPE_VIOLATION: " +
                             MilestoneDefinitionContract.Limit(summary, 1200));
-                    // In-progress or malformed reports may represent partial,
-                    // unaccounted changes. They must not unlock direct fallback.
-                    if (!parsedWork.IsValid)
-                        throw new InvalidOperationException("WORK_REPORT_INVALID: " +
-                            MilestoneDefinitionContract.Limit(summary, 1200));
-                    if (string.Equals(parsedWork.Status, "in_progress",
-                            StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidOperationException("WORK_IN_PROGRESS: " +
-                            MilestoneDefinitionContract.Limit(summary, 1200));
-                    if (!completed)
+                    if (result.ExitCode != 0)
                         throw new InvalidOperationException("TEMP_WORK_FAILED: " +
-                            MilestoneDefinitionContract.Limit(summary, 1200));
-                    return summary;
+                            "exit=" + result.ExitCode + Environment.NewLine +
+                            result.StandardError + Environment.NewLine +
+                            result.FinalMessage);
+                    // Return the exact WORK output to SV/HIGH. They determine
+                    // whether a report is complete, partial, or needs rework.
+                    return result.FinalMessage;
                 }
                 finally
                 {
