@@ -887,8 +887,10 @@ internal static class MilestoneDefinitionContract
                   string.Join(", ", unread));
         }
 
+        if (workerOutcome == "GIT_APPROVAL_REQUIRED")
+            builder.AppendLine("GIT_APPROVAL_REQUIRED: HQ는 원문 SV/HIGH 및 기계적 증거를 검토한 뒤 [ACTION=GIT_APPROVE] 또는 [ACTION=PAUSE] 선택");
         builder.AppendLine("ARCHIVE: " + archiveReference);
-        builder.AppendLine("DECISION_REQUIRED: 다음 WORK / PAUSE / END 중 하나를 판단");
+        builder.AppendLine("DECISION_REQUIRED: Git 승인 대기이면 GIT_APPROVE / PAUSE, 아니면 WORK / PAUSE / END");
         return builder.ToString();
     }
 
