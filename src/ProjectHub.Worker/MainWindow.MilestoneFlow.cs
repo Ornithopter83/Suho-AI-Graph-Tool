@@ -1012,8 +1012,9 @@ public partial class MainWindow
                 outcome = "BUILD_FAILED";
 
 
-            // HIGH only reviews; the next SV milestone handles modifications.
-            if (pendingWorkIds.Length == 0)
+            // HIGH always receives the SV's raw evidence, even for
+            // in_progress/malformed reports; HIGH owns the interpretation.
+            var highExecutionFailed = false;
             {
             var beforeHigh = await MilestoneMechanicalExecutor.SnapshotChangeStateAsync(
                 workingDirectory, cancellationToken);
@@ -1025,6 +1026,7 @@ public partial class MainWindow
             highReport = highRun.Report;
             if (highRun.ExitCode != 0)
             {
+                highExecutionFailed = true;
                 mechanicalReports.Add("HIGH_EXECUTION_ERROR: " + highRun.StandardError);
                 if (outcome == "COMPLETED")
                     outcome = "HIGH_EXECUTION_FAILED";
@@ -1085,9 +1087,7 @@ public partial class MainWindow
                 gitResult = MilestoneGitResult.SkippedReadOnly(
                     milestone.TargetBranch);
             }
-            else if (!MilestoneFinalizationPolicy.ShouldPublish(
-                blockedWorkIds.Length, pendingWorkIds.Length,
-                buildFailed, outcome))
+            else if (supervisor.ExitCode != 0 || highExecutionFailed || buildFailed)
             {
                 // Never publish an unchanged old HEAD and label the Git phase
                 // successful after the implementation was blocked. Keep any
@@ -1096,7 +1096,7 @@ public partial class MainWindow
                 AddDataFlowHistory(
                     WorkerRoleState.Unknown,
                     "Git 최종화",
-                    "GIT_FINALIZE_SKIPPED: 구현·검증 미완료, 기존 HEAD 게시 안 함",
+                    "GIT_FINALIZE_SKIPPED: 기계적 실행·빌드 오류, 기존 HEAD 게시 안 함",
                     status: "BLOCKED",
                     persistenceSource: "WORKER ACTION");
             }
