@@ -253,38 +253,25 @@ M22 최종 보고:
     }
 
     [Fact]
-    public void WorkReportNormalizer_UsesAnnotationStatus()
+    public void WorkReportNormalizer_PreservesOpaqueLegacyReport()
     {
-        var valid = MilestoneDefinitionContract.NormalizeWorkReport(
-            0,
-            """
-            [ACTION=RESULT]
-            STATUS: completed
+        const string raw = """
+[ACTION=RESULT]
+STATUS: completed
 
-            @@SUMMARY
-            완료
-
-            @@CHANGED_PATHS
-            - src/A.cs
-
-            @@ISSUES
-            없음
-
-            [RESPONSE=OK]
-            """,
-            null);
-
-        Assert.Contains("<STATUS>completed</>", valid);
-        Assert.DoesNotContain("STATUS: completed", valid);
-        Assert.Equal("completed", MilestoneDefinitionContract.ReadWorkStatus(valid));
-
-        var invalid = MilestoneDefinitionContract.NormalizeWorkReport(
-            0,
-            "완료",
-            null);
-
-        Assert.Contains("<STATUS>blocked</>", invalid);
-        Assert.Contains("WORK_REPORT_CONTRACT_INVALID", invalid);
+@@SUMMARY
+완료
+@@CHANGED_PATHS
+- src/A.cs
+@@ISSUES
+없음
+[RESPONSE=OK]
+""";
+        var result = MilestoneDefinitionContract.NormalizeWorkReport(0, raw, null);
+        Assert.Equal(raw, result);
+        Assert.Equal("completed", MilestoneDefinitionContract.ReadWorkStatus(result));
+        Assert.Equal("완료", MilestoneDefinitionContract.NormalizeWorkReport(0, "완료", null));
+        Assert.Null(MilestoneDefinitionContract.ReadWorkStatus("완료"));
     }
 
     [Fact]
