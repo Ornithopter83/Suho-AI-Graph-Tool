@@ -27,18 +27,15 @@ public sealed class MilestoneStateConsistencyTests
     }
 
     [Fact]
-    public void WorkerBlockedDiagnostics_SurviveNonzeroExit()
+    public void WorkerOriginalReport_SurvivesNonzeroExit()
     {
         var raw = RoleTextProtocol.BuildResult(
             "blocked", "SV_WORK_DELEGATION_UNSAFE_TO_FALLBACK",
             issues: new[] { "WORK_SCOPE_VIOLATION" });
         var normalized = MilestoneDefinitionContract.NormalizeWorkReport(
             1, raw, "UI callback NotSupportedException");
-        var parsed = RoleTextProtocol.ParseWork(normalized);
-        Assert.True(parsed.IsValid);
-        Assert.Equal("blocked", parsed.Status);
-        Assert.Contains("SV_WORK_DELEGATION_UNSAFE_TO_FALLBACK", parsed.Summary);
-        Assert.Contains(parsed.Issues, item => item.Contains("NotSupportedException"));
+        Assert.Equal(raw, normalized);
+        Assert.DoesNotContain("NotSupportedException", normalized);
     }
 
     [Fact]
