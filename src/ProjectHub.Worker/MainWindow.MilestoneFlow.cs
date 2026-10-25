@@ -400,6 +400,61 @@ public partial class MainWindow
                     AddHqInterventionHistory(delivered, delivered: true);
                 }
 
+                // Explicit HQ approval is required after SV/HIGH evidence
+                // has been delivered. This is a bracket control, not a
+                // semantic decision made by inspecting an AI report.
+                if (string.Equals(hqAction.Name, "GIT_APPROVE",
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    var pending = LoadPendingGitApproval(normalizedRoot);
+                    if (pending is null)
+                    {
+                        hqInbound = "GIT_APPROVAL_NOT_PENDING: 승인할 Git 작업이 없습니다. " +
+                            "마일스톤 결과를 다시 검토하라.";
+                        PersistRecovery(hqInbound);
+                        continue;
+                    }
+                    try
+                    {
+                        var approved = await ApprovePendingGitAsync(
+                            normalizedRoot, jobId, configuredRepositoryUrl,
+                            cts.Token);
+                        if (!approved.Success)
+                        {
+                            hqInbound = "GIT_APPROVAL_EXECUTION_FAILED: " +
+                                approved.Summary +
+                                Environment.NewLine +
+                                "Git 작업을 완료하지 못했다. 성공으로 판정하지 마라.";
+                        }
+                        else
+                        {
+                            hqInbound = "GIT_APPROVED_AND_FINALIZED: " +
+                                approved.Summary +
+                                Environment.NewLine +
+                                "최신 결과를 검토하고 추가 작업 또는 종료를 판단하라.";
+                        }
+                    }
+                    catch (Exception approvalError)
+                    {
+                        hqInbound = "GIT_APPROVAL_REJECTED: " +
+                            approvalError.Message +
+                            Environment.NewLine +
+                            "이전 승인 범위가 변경됐거나 유효하지 않다. 원인을 판단하라.";
+                    }
+                    PersistRecovery(hqInbound);
+                    continue;
+                }
+
+                if (LoadPendingGitApproval(normalizedRoot) is not null &&
+                    hqAction.Name is "WORK" or "END")
+                {
+                    hqInbound = "GIT_APPROVAL_REQUIRED: 아직 원격 반영되지 않은 " +
+                        "마일스톤이 있다. 원문 증거를 검토하고 [ACTION=GIT_APPROVE] " +
+                        "또는 [ACTION=PAUSE]를 선택하라. 승인 전 새 마일스톤/종료 금지.";
+                    PersistRecovery(hqInbound);
+                    continue;
+                }
+
                 if (string.Equals(
                         hqAction.Name,
                         "PAUSE",
@@ -1047,64 +1102,23 @@ public partial class MainWindow
             }
             else
             {
+                // HQ reviews the raw SV/HIGH evidence before Git publication.
+                // The approval is persisted and tied to unchanged source state.
+                var approvalPaths = milestoneChangedPaths.ToArray();
+                var approvalSnapshot =
+                    await MilestoneMechanicalExecutor.SnapshotChangeStateAsync(
+                        workingDirectory, cancellationToken, requireSuccess: true,
+                        scopedPaths: approvalPaths).ConfigureAwait(false);
+                SavePendingGitApproval(workingDirectory, new PendingGitApproval(
+                    jobId, workingDirectory, milestone, approvalPaths,
+                    new Dictionary<string, string>(
+                        approvalSnapshot, StringComparer.OrdinalIgnoreCase)));
+                gitResult = MilestoneGitResult.NotStarted(milestone.TargetBranch);
+                outcome = "GIT_APPROVAL_REQUIRED";
                 AddDataFlowHistory(
-                    WorkerRoleState.Unknown,
-                    "Worker 작업",
-                    "GIT_FINALIZE 강제 실행",
-                    status: "EXECUTING",
-                    persistenceSource: "WORKER ACTION");
-
-                var gitProgress = new Progress<string>(message =>
-                    RunOnUi(() => AddDataFlowHistory(
-                        WorkerRoleState.Unknown,
-                        "Worker 작업",
-                        message,
-                        status: "EXECUTING",
-                        persistenceSource: "WORKER ACTION")));
-
-                gitResult = await MilestoneMechanicalExecutor.FinalizeGitAsync(
-                    workingDirectory,
-                    milestone,
-                    milestoneChangedPaths,
-                    _targetSettings.ManualRepositoryUrl?.Trim(),
-                    cancellationToken,
-                    gitProgress);
-
-                if (!gitResult.Success)
-                {
-                    var originalGitError = gitResult.Summary;
-                    var gitHigh = await ExecuteGitHighAsync(
-                        jobId, workingDirectory, milestone, high,
-                        "FINALIZE", originalGitError, cancellationToken);
-                    mechanicalReports.Add("GIT_HIGH: " +
-                        MilestoneDefinitionContract.Limit(gitHigh, 1200));
-                    mechanicalReports.Add("GIT_INITIAL_FAILURE: " +
-                        MilestoneDefinitionContract.Limit(originalGitError, 1200));
-                    // HIGH can fix .gitignore or source configuration. Include
-                    // its actual changes in the single controlled Worker retry.
-                    var changedAfterGitHigh =
-                        await MilestoneMechanicalExecutor.SnapshotChangedPathsAsync(
-                            workingDirectory, cancellationToken);
-                    foreach (var path in changedAfterGitHigh)
-                        if (!initialChangedPaths.Contains(path) ||
-                            milestoneChangedPaths.Contains(path))
-                            milestoneChangedPaths.Add(path);
-                    gitResult = await MilestoneMechanicalExecutor.FinalizeGitAsync(
-                        workingDirectory, milestone, milestoneChangedPaths,
-                        _targetSettings.ManualRepositoryUrl?.Trim(),
-                        cancellationToken, gitProgress);
-
-                }
-
-                if (gitResult.Success)
-                    _resourcePendingGit.Acknowledge(workingDirectory, pendingResourcePaths);
-
-                AddDataFlowHistory(
-                    WorkerRoleState.Unknown,
-                    "Git 최종화",
-                    gitResult.Summary,
-                    status: gitResult.Success ? "COMPLETED" : "FAILED",
-                    persistenceSource: "WORKER ACTION");
+                    WorkerRoleState.Unknown, "Git 최종화",
+                    "GIT_APPROVAL_REQUIRED: HQ 검토 후 [ACTION=GIT_APPROVE] 승인 대기",
+                    status: "PENDING", persistenceSource: "WORKER ACTION");
             }
 
             // A successful implementation is not a completed milestone when
