@@ -55,7 +55,9 @@ public sealed class M17DelegationRegressionTests
     {
         var blocked = SpecialistDelegationPolicy.Enforce(
             Result(0, "completed"), mandatory: true, successfulDelegations: 0);
-        Assert.Equal("blocked", RoleTextProtocol.ParseWork(blocked.FinalMessage).Status);
+        Assert.NotEqual(0, blocked.ExitCode);
+        Assert.Equal("completed", RoleTextProtocol.ParseWork(blocked.FinalMessage).Status);
+        Assert.Contains(SpecialistDelegationPolicy.MissingWorkCode, blocked.StandardError);
     }
 
     [Fact]
