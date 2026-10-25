@@ -49,9 +49,9 @@ public sealed class SpecialistDelegationPolicyTests
             Array.Empty<CodexCommandExecution>());
         var enforced = SpecialistDelegationPolicy.Enforce(result, true, 0);
         Assert.NotEqual(0, enforced.ExitCode);
-        Assert.Equal("blocked", RoleTextProtocol.ParseWork(enforced.FinalMessage).Status);
+        Assert.Equal(result.FinalMessage, enforced.FinalMessage);
         Assert.Contains(SpecialistDelegationPolicy.MissingWorkCode,
-            enforced.FinalMessage);
+            enforced.StandardError);
     }
 
     [Fact]
