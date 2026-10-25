@@ -42,7 +42,7 @@ public static class ActionBlockContract
     private static readonly HashSet<string> HqActionNames =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            "WORK", "PAUSE", "END"
+            "WORK", "PAUSE", "END", "GIT_APPROVE"
         };
 
     private static readonly HashSet<string> ManagerActionNames =
@@ -308,6 +308,10 @@ public static class ActionBlockContract
             string.Equals(
                 actionName,
                 "END",
+                StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(
+                actionName,
+                "GIT_APPROVE",
                 StringComparison.OrdinalIgnoreCase))
         {
             if (!TryGetString(root, "message", out body))
