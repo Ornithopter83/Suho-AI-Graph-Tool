@@ -134,7 +134,7 @@ public sealed partial class BridgeServer
                 : session.InvocationId;
             session.Evidence.Enqueue(new DelegatedWorkEvidence(
                 invocation, "COMPLETED",
-                MilestoneDefinitionContract.Limit(message, 5000)));
+                message));
             return message;
         }
         finally
@@ -304,7 +304,7 @@ public sealed partial class BridgeServer
                     message = error.GetType().Name + ": " + error.Message;
                     session.Evidence.Enqueue(new DelegatedWorkEvidence(
                         session.InvocationId, classification,
-                        MilestoneDefinitionContract.Limit(message, 500)));
+                        message));
                 }
                 McpActivity?.Invoke(session.Role,
                     (failed ? "TOOL_FAILED " : "TOOL_COMPLETED ") + "delegate_work");
