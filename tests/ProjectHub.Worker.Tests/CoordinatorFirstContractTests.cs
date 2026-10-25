@@ -18,6 +18,36 @@ public sealed class CoordinatorFirstContractTests
     }
 
     [Fact]
+    public void RoleReport_MissingMiddleFields_PreservesBracketValidRaw()
+    {
+        const string report = "[ACTION=RESULT]\\n@@REPORT\\n<ISSUES>원문 전달</ISSUES>\\n[RESPONSE=OK]";
+        var parsed = RoleTextProtocol.ParseWork(report);
+        Assert.True(parsed.IsValid, string.Join("; ", parsed.Errors));
+        Assert.Equal("", parsed.Status);
+        Assert.Equal(report, MilestoneDefinitionContract.NormalizeWorkReport(0, report, ""));
+    }
+
+    [Fact]
+    public void RoleReport_CopiedChildBracketControls_AreOpaque()
+    {
+        const string report = """
+[ACTION=RESULT]
+@@REPORT
+<SUMMARY>
+복사된 WORK 원문:
+[ACTION=RESULT]
+@@REPORT
+<STATUS>blocked</>
+[RESPONSE=OK]
+</>
+[RESPONSE=OK]
+""";
+        var parsed = RoleTextProtocol.ParseWork(report);
+        Assert.True(parsed.IsValid, string.Join("; ", parsed.Errors));
+        Assert.Equal(report.Trim(), MilestoneDefinitionContract.NormalizeHighReport(0, report.Trim(), ""));
+    }
+
+    [Fact]
     public void RoleReport_InlineClosingMarkerInProse_IsNotAFieldBoundary()
     {
         const string report = """
