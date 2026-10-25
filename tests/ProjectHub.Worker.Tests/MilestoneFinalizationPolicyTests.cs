@@ -60,6 +60,17 @@ public sealed class MilestoneFinalizationPolicyTests
     }
 
     [Fact]
+    public void NoChangesIsSkippedRatherThanPublishingOldHead()
+    {
+        var git = MilestoneGitResult.SkippedNoChanges("main");
+        Assert.True(git.Success);
+        Assert.Null(git.CommitSha);
+        Assert.Contains("SKIPPED_NO_CHANGES", git.Summary);
+        Assert.Equal("SKIPPED",
+            MilestoneGraphStatePolicy.GitState("SKIPPED_NO_CHANGES"));
+    }
+
+    [Fact]
     public void GitOperationMarker_BlocksWithoutModifyingMarker()
     {
         var root = Path.Combine(Path.GetTempPath(),
